@@ -303,6 +303,11 @@ func (c *Client) SendReceive(sendFd, recvFd int, packet *dhcpv4.DHCPv4, messageT
 				continue
 			}
 			udph := buf[iph.Len:n]
+			// The IP payload must be large enough to hold a UDP header,
+			// otherwise reading the ports and length below slices out of range.
+			if len(udph) < 8 {
+				continue
+			}
 			// check source and destination ports
 			srcPort := int(binary.BigEndian.Uint16(udph[0:2]))
 			expectedSrcPort := dhcpv4.ServerPort
@@ -322,6 +327,12 @@ func (c *Client) SendReceive(sendFd, recvFd int, packet *dhcpv4.DHCPv4, messageT
 			}
 			// UDP checksum is not checked
 			pLen := int(binary.BigEndian.Uint16(udph[4:6]))
+			// The declared UDP length must cover its own 8-byte header and
+			// must not exceed the bytes actually received, otherwise the
+			// payload slice is out of range.
+			if pLen < 8 || pLen > len(udph) {
+				continue
+			}
 			payload := buf[iph.Len+8 : iph.Len+pLen]
 
 			response, innerErr = dhcpv4.FromBytes(payload)
